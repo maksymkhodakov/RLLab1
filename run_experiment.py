@@ -20,18 +20,22 @@ import matplotlib.pyplot as plt
 from mountain_car_dp import DiscretizedMountainCar
 from dp_algorithms import policy_iteration, value_iteration
 
-N_POS, N_VEL = 200, 200
+N_POS, N_VEL = 300, 300
 # Примітка: крок сили в MountainCar дуже малий (force=0.001) відносно
 # діапазону швидкості (0.14), тому груба сітка (наприклад 60x60, ширина
 # комірки швидкості ~0.0024) призводить до аліасингу при округленні до
 # найближчої комірки — похибка дискретизації маскує реальний вплив дії,
 # і отримана політика виявляється майже випадковою в неперервному
-# середовищі. Сітка 200x200 (ширина комірки швидкості ~0.0007 < force)
-# усуває цей ефект і дає стабільну, майже 100% успішну політику.
+# середовищі. При 200x200 (ширина комірки швидкості ~0.0007 < force)
+# аліасинг зникає, але під ЧЕСНИМ стандартним лімітом Gym (200 кроків
+# на епізод, без розширення) середня винагорода ще трохи гірша за
+# класичний поріг "розв'язано" (-110): ~-114..-118. Сітка 300x300 дає
+# 100% успіху та середню винагороду ~-109 (обчислення все ще <0.3с
+# для VI і ~1.2с для PI — тож дешевше просто взяти сітку дрібнішою).
 GAMMA = 0.99
 THETA = 1e-6
 EVAL_EPISODES = 100
-MAX_STEPS = 1000  # більше за стандартний ліміт (200), щоб не занижувати політику під час оцінки
+MAX_STEPS = 200  # стандартний ліміт епізоду в MountainCar-v0 (чесна, а не завищена оцінка)
 
 ACTION_NAMES = {0: "← push left", 1: "no push", 2: "push right →"}
 
@@ -59,9 +63,11 @@ def evaluate_policy(model: DiscretizedMountainCar, policy: np.ndarray,
     env.close()
     success_rate = successes / n_episodes
     avg_len = float(np.mean(lengths))
+    mean_reward = -avg_len  # reward = -1 за кожен крок (в т.ч. невдалі, обмежені max_steps)
     return {
         "success_rate": success_rate,
         "avg_episode_len": avg_len,
+        "mean_reward": mean_reward,
         "successes": successes,
         "n_episodes": n_episodes,
     }
@@ -157,14 +163,15 @@ def main():
     print(f"Максимальна різниця V*(s) між VI та PI: {max_v_diff:.6f}")
 
     print("\nОцінювання політик у справжньому (неперервному) середовищі Gymnasium "
-          f"({EVAL_EPISODES} епізодів кожна)...")
+          f"(стандартний ліміт {MAX_STEPS} кроків/епізод, {EVAL_EPISODES} епізодів кожна)...")
     vi_eval = evaluate_policy(model, policy_vi)
     pi_eval = evaluate_policy(model, policy_pi)
 
     print(f"  Value Iteration : success_rate={vi_eval['success_rate']*100:.1f}%  "
-          f"avg_episode_len={vi_eval['avg_episode_len']:.1f}")
+          f"avg_episode_len={vi_eval['avg_episode_len']:.1f}  mean_reward={vi_eval['mean_reward']:.2f}")
     print(f"  Policy Iteration: success_rate={pi_eval['success_rate']*100:.1f}%  "
-          f"avg_episode_len={pi_eval['avg_episode_len']:.1f}")
+          f"avg_episode_len={pi_eval['avg_episode_len']:.1f}  mean_reward={pi_eval['mean_reward']:.2f}")
+    print("  (класичний поріг Gym \"розв'язано\": середня винагорода за 100 епізодів >= -110)")
 
     print("\nПобудова графіків у results/ ...")
     plot_policy_heatmap(model, policy_vi, "Політика: Value Iteration", "results/policy_heatmap_vi.png")
@@ -184,6 +191,7 @@ def main():
         ("Сумарних розгорток оцінки", f"{vi_stats['sweeps']}", f"{pi_stats['total_eval_sweeps']}"),
         ("Success rate, %", f"{vi_eval['success_rate']*100:.1f}", f"{pi_eval['success_rate']*100:.1f}"),
         ("Середня довжина епізоду", f"{vi_eval['avg_episode_len']:.1f}", f"{pi_eval['avg_episode_len']:.1f}"),
+        ("Середня винагорода (>= -110 = solved)", f"{vi_eval['mean_reward']:.2f}", f"{pi_eval['mean_reward']:.2f}"),
         ("Політики ідентичні", str(same_policy), str(same_policy)),
     ]
     for name, v1, v2 in rows:
