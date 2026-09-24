@@ -57,6 +57,9 @@ def policy_iteration(P, R, terminal, gamma=0.99, theta=1e-6, max_eval_iter=10_00
 
     stats["time_sec"] = time.perf_counter() - start
     stats["total_eval_sweeps"] = int(sum(stats["policy_eval_sweeps"]))
+    # policy тут — та сама π* "розгойдування" (energy pumping), що й у
+    # value_iteration (обидва методи доводять збіжність до єдиного
+    # оптимуму — див. mountain_car_dp.py для детального пояснення стратегії).
     return V, policy, stats
 
 
@@ -85,6 +88,9 @@ def value_iteration(P, R, terminal, gamma=0.99, theta=1e-6, max_iter=100_000):
 
     Q = R + gamma * V[P]
     policy = np.argmax(Q, axis=1)
+    # Отримана π*(s) — стратегія "розгойдування" (energy pumping): push
+    # right при velocity>0, push left при velocity<0 (детальне пояснення
+    # чому це оптимально — докстрінг модуля mountain_car_dp.py).
 
     stats = {"sweeps": it, "time_sec": time_sec, "delta_history": delta_history}
     return V, policy, stats

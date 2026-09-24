@@ -1,11 +1,17 @@
-# Лабораторна робота №1
+# Лабораторна робота №1-2
 ## "Машинне навчання з підкріпленням"
 ## Ходаков Максим Олегович ШІ-2
 
 ## Завдання
 
-Розв'язати задачу [Mountain Car](https://gymnasium.farama.org/environments/classic_control/mountain_car/)
+Лаб. 1: розв'язати задачу [Mountain Car](https://gymnasium.farama.org/environments/classic_control/mountain_car/)
 методами **Policy Iteration** та **Value Iteration**, порівняти отримані результати.
+
+Лаб. 2: адаптувати метод **Monte Carlo** (model-free) до того самого сценарію
+та порівняти результати з Policy Iteration та Value Iteration. Детальний
+опис адаптації, проблем розрідженої винагороди в MountainCar та їх
+розв'язання (reward shaping) — в `mountain_car_mc.py` та
+`results/Lab2_MountainCar_MonteCarlo_Report.docx`.
 
 ## Підхід
 
@@ -37,11 +43,16 @@ model-free навчання, а класичне планування за ві�
 - `run_experiment.py` — точка входу: будує модель, запускає обидва методи,
   оцінює отримані політики в справжньому (неперервному) середовищі
   Gymnasium, зберігає графіки в `results/`.
+- `mountain_car_mc.py` — on-policy first-visit Monte Carlo control
+  (model-free) з potential-based reward shaping (`MCDiscretizer`, `mc_control`).
+- `run_mc_experiment.py` — точка входу Лаб. 2: запускає Monte Carlo, Value
+  Iteration та Policy Iteration, порівнює всі три методи, зберігає графіки.
 
 Запуск:
 ```bash
 pip install -r requirements.txt
-python run_experiment.py
+python run_experiment.py       # Лаб. 1: VI vs PI
+python run_mc_experiment.py    # Лаб. 2: MC vs VI vs PI
 ```
 
 ## Результати (сітка 300x300, γ=0.99, θ=1e-6)
@@ -98,3 +109,36 @@ python run_experiment.py
   зовнішній цикл. Це типова картина: PI зазвичай збігається за менше
   ітерацій "верхнього рівня", але VI часто швидше за сумарним часом,
   оскільки не вимагає точної оцінки політики на кожному кроці.
+
+## Лаб. 2: Monte Carlo control (model-free)
+
+На відміну від VI/PI, Monte Carlo не отримує модель `P`/`R` — навчається
+виключно з реальних епізодів взаємодії із середовищем. "Наївний" MC не
+працює на MountainCar: розріджена винагорода (-1/крок, 0 лише в момент
+успіху) означає, що випадкова політика практично ніколи не досягає цілі
+(~1.5% навіть за горизонт 2000 кроків), тож MC не отримує диференційного
+навчального сигналу. Ані exploring starts (Sutton & Barto §5.3), ані
+epsilon-greedy самі по собі це не виправили (0% успіху при чесній оцінці
+навіть після 300k епізодів на сітці, що усуває аліасинг). Розв'язано
+**potential-based reward shaping** (Ng et al., 1999): `F(s,s')=γΦ(s')-Φ(s)`,
+`Φ(position)=100·sin(3·position)` — теоретично не змінює оптимальну
+політику, але дає щільний сигнал прогресу. Результат: сітка 50×50,
+100 000 епізодів, 370.8 с навчання → **98.0% success rate**, середня
+винагорода -149.6 (проти 100% / -109.3 у VI/PI). Детальний опис усього
+процесу адаптації — в `mountain_car_mc.py` та
+`results/Lab2_MountainCar_MonteCarlo_Report.docx`.
+
+| Метрика | Monte Carlo | Value Iteration | Policy Iteration |
+|---|:---:|:---:|:---:|
+| Тип методу | model-free | model-based (DP) | model-based (DP) |
+| Сітка станів | 50×50 | 300×300 | 300×300 |
+| Час обчислення, с | 370.8 | 0.176 | 1.018 |
+| К-сть епізодів/розгорток | 100 000 | 112 | 94 покращення |
+| Success rate, % | 98.0 | 100.0 | 100.0 |
+| Середня винагорода | -149.64 | -109.29 | -109.29 |
+
+**Висновок**: коли модель середовища відома (тут — з фізики MountainCar),
+DP-методи незрівнянно ефективніші за часом і якістю. Model-free Monte
+Carlo виправдано лише тоді, коли модель недоступна — і навіть тоді
+потребує суттєвої адаптації (reward shaping) та грубішої дискретизації
+(вибіркова складність), щоб взагалі навчитись.
